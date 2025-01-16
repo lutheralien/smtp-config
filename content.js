@@ -2,6 +2,7 @@ const oracledb = require('oracledb');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs').promises;
+const handlebars = require('handlebars');
 
 // Email configuration
 const emailConfig = {
@@ -22,6 +23,92 @@ const dbConfig = {
 };
 
 oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+
+// Email templates object
+const emailTemplates = {
+    'STATEMENT_TEMPLATE': {
+        subject: 'Your Statement for Account {{ACCOUNTNUM}}',
+        html: `
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; }
+                    .header { color: #333; margin-bottom: 20px; }
+                    .content { margin: 20px 0; }
+                    .footer { color: #666; font-size: 0.9em; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>Statement Notification</h2>
+                </div>
+                <div class="content">
+                    <p>Dear {{ACCOUNTNAME}},</p>
+                    <p>Please find attached your statement for account number {{ACCOUNTNUM}}.</p>
+                    <p>Statement Details:</p>
+                    <ul>
+                        <li>Account Number: {{ACCOUNTNUM}}</li>
+                        <li>Customer Number: {{CUSTOMER_NUMBER}}</li>
+                        <li>Date: {{formatDate TIMESTAMP}}</li>
+                    </ul>
+                    <p>If you have any questions, please don't hesitate to contact us.</p>
+                </div>
+                <div class="footer">
+                    <p>Best regards,<br>Your Company Name</p>
+                    <small>This is an automated message, please do not reply directly to this email.</small>
+                </div>
+            </body>
+            </html>
+        `
+    },
+    // Add more templates as needed
+    'REMINDER_TEMPLATE': {
+        subject: 'Payment Reminder for Account {{ACCOUNTNUM}}',
+        html: `
+            <html>
+            <head>
+                <style>
+                    body { font-family: Arial, sans-serif; line-height: 1.6; }
+                    .header { color: #333; margin-bottom: 20px; }
+                    .content { margin: 20px 0; }
+                    .footer { color: #666; font-size: 0.9em; margin-top: 20px; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>Payment Reminder</h2>
+                </div>
+                <div class="content">
+                    <p>Dear {{ACCOUNTNAME}},</p>
+                    <p>This is a friendly reminder about your account {{ACCOUNTNUM}}.</p>
+                    <p>Please find the attached statement for your reference.</p>
+                    <p>Account Details:</p>
+                    <ul>
+                        <li>Account Number: {{ACCOUNTNUM}}</li>
+                        <li>Customer Number: {{CUSTOMER_NUMBER}}</li>
+                        <li>Date: {{formatDate TIMESTAMP}}</li>
+                    </ul>
+                </div>
+                <div class="footer">
+                    <p>Best regards,<br>Your Company Name</p>
+                    <small>This is an automated message, please do not reply directly to this email.</small>
+                </div>
+            </body>
+            </html>
+        `
+    }
+};
+
+// Register Handlebars helpers
+handlebars.registerHelper('formatDate', function(date) {
+    if (!date) return '';
+    const d = new Date(date);
+    return d.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+});
 
 // Create email transporter
 const transporter = nodemailer.createTransport(emailConfig);
@@ -66,17 +153,36 @@ async function updateEmailStatus(connection, id, status) {
     }
 }
 
+// Compile email template
+function compileTemplate(templateName, data) {
+    const template = emailTemplates[templateName];
+    if (!template) {
+        throw new Error(`Template ${templateName} not found`);
+    }
+
+    const compiledSubject = handlebars.compile(template.subject)(data);
+    const compiledHtml = handlebars.compile(template.html)(data);
+
+    return {
+        subject: compiledSubject,
+        html: compiledHtml
+    };
+}
+
 // Send email with attachment
 async function sendEmail(emailData) {
     try {
         const attachmentPath = path.join(emailData.ATTACHMENT_PATH, emailData.ATTACHMENT_NAME);
         const attachment = await fs.readFile(attachmentPath);
 
+        // Compile template with email data
+        const template = compileTemplate(emailData.TEMPLATE, emailData);
+
         const mailOptions = {
             from: emailConfig.auth.user,
             to: emailData.EMAIL,
-            subject: `Statement for ${emailData.ACCOUNTNAME}`,
-            text: `Dear ${emailData.ACCOUNTNAME},\n\nPlease find attached your statement.\n\nBest regards,\nYour Company`,
+            subject: template.subject,
+            html: template.html,
             attachments: [{
                 filename: emailData.ATTACHMENT_NAME,
                 content: attachment
@@ -146,7 +252,8 @@ async function runEmailProcess() {
 // Export functions for use in other modules
 module.exports = {
     processEmails,
-    runEmailProcess
+    runEmailProcess,
+    emailTemplates
 };
 
 // Run if called directly
