@@ -2,25 +2,21 @@ const nodemailer = require('nodemailer');
 
 async function testEmail() {
     // Generate test account
-    console.log('Creating test account...');
-    const testAccount = await nodemailer.createTestAccount();
-    console.log('Test account created:', testAccount.user);
-
     // Create reusable transporter
     const transporter = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
+        host: 'sandbox.smtp.mailtrap.io',
+        port: 2525,
         secure: false,
         auth: {
-            user: testAccount.user,
-            pass: testAccount.pass
+            user: "5e5cba51d98382",
+            pass: "8b666f63c9a44b"
         }
     });
 
     // Email content
     const mailOptions = {
-        from: `"Test Sender" <${testAccount.user}>`,
-        to: "recipient@example.com",
+        from: `"Test Sender" <"5e5cba51d98382>`,
+        to: "yelof71520@downlor.com",
         subject: "Test Email ✔",
         text: "This is a test email from Ethereal",
         html: "<b>This is a test email from Ethereal</b>", // Optional HTML version
